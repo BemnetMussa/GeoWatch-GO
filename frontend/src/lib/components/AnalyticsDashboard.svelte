@@ -79,8 +79,12 @@
 </script>
 
 {#if isOpen}
-	<div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-		<div class="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+    <!-- Centered modal with subtle transparent backdrop, minimal obstruction -->
+    <div class="fixed inset-0 z-40 pointer-events-none">
+        <div class="absolute inset-0 bg-black/10"></div>
+    </div>
+    <div class="fixed inset-0 z-50 flex items-start justify-center p-6">
+        <div class="bg-white/95 backdrop-blur rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden pointer-events-auto">
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-slate-200">
 				<div class="flex items-center space-x-3">

@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # Layer 1: The Python GEE Analysis Service
+  # ----------------------------------------------------
+  python-gee-service:
+    build:
+      context: ./gee-service
+    container_name: python-gee-service
+    ports:
+      # We expose port 5000 for direct testing, but it's not required for the app to work.
+      - "8080:5000"
+    restart: unless-stopped
+
+  # ----------------------------------------------------
+  # Layer 2: The Go Backend Orchestrator
+  # ----------------------------------------------------
+  go-backend:
+    build:
+      context: ./backend
+    container_name: go-backend
+    ports:
+      # Expose port 8000 on the host machine, mapping to port 8000 inside the container.
+      - "8081:8000"
+    environment:
+      # This is the INTERNAL Docker network address for the Python service.
+      PYTHON_SERVICE_URL: http://python-gee-service:5000
+      # This is the INTERNAL Docker network address for the database.
+      DATABASE_URL: postgres://user:password@db:5432/geowatch?sslmode=disable
+    depends_on:
+      - python-gee-service
+      - db
+    restart: unless-stopped
+
+  # ----------------------------------------------------
+  # Layer 3: The Svelte + CesiumJS Frontend
+  # ----------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    ports:
+      # Expose port 8080 on the host machine, mapping to the app's port inside the container.
+      # SvelteKit adapter-node defaults to port 3000.
+      - "8082:3000"
+    environment:
+      # IMPORTANT: This is the PUBLIC URL the user's BROWSER will use to find the Go backend.
+      # It MUST be localhost and the port you exposed for the 'go-backend' service (8000).
+      PUBLIC_GO_BACKEND_URL: http://localhost:8081
+      # These are standard variables for the SvelteKit node adapter.
+      PORT: 3000
+      ORIGIN: http://localhost:8080
+    depends_on:
+      - go-backend
+    restart: unless-stopped
+
+  # ----------------------------------------------------
+  # Layer 4: The Database
+  # ----------------------------------------------------
+  db:
+    image: postgis/postgis:13-3.1
+    container_name: geowatch-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: geowatch
+    ports:
+      # Expose the standard PostgreSQL port.
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+# Define a persistent volume for the database data.
+volumes:
+  postgres_data:

@@ -2,21 +2,30 @@
 	import { TrendingUp, TrendingDown, Plus, Minus, Calendar, Play, Loader2 } from 'lucide-svelte';
 	import type { ChangeDetectionResult } from '$lib/types';
 	
-	interface Props {
-		onAnalyze: (basePeriod: number, comparePeriod: number) => Promise<void>;
-		result: ChangeDetectionResult | null;
-		loading: boolean;
-	}
+    interface Props {
+        onAnalyze: (basePeriod: number, comparePeriod: number) => Promise<void>;
+        result: ChangeDetectionResult | null;
+        loading: boolean;
+        yearsMode?: boolean;
+        startYear?: number;
+        endYear?: number;
+        onYearsChange?: (startYear: number, endYear: number) => void;
+    }
 	
-	let { onAnalyze, result, loading }: Props = $props();
+    let { onAnalyze, result, loading, yearsMode = false, startYear, endYear, onYearsChange }: Props = $props();
 	
-	let basePeriod = $state(7); // 1 week ago
-	let comparePeriod = $state(1); // 1 day ago
+    let basePeriod = $state(7); // days ago (used when yearsMode === false)
+    let comparePeriod = $state(1); // days ago (used when yearsMode === false)
 	let isOpen = $state(false);
 	
-	async function handleAnalyze() {
-		await onAnalyze(basePeriod, comparePeriod);
-	}
+    async function handleAnalyze() {
+        if (yearsMode) {
+            // In years mode, the parent handles years; pass placeholders
+            await onAnalyze(0, 0);
+            return;
+        }
+        await onAnalyze(basePeriod, comparePeriod);
+    }
 	
 	function getChangeColor(type: 'new' | 'extinguished' | 'growing' | 'diminishing') {
 		switch (type) {
@@ -39,48 +48,80 @@
 		</button>
 		
 		{#if isOpen}
-			<div class="border-t border-slate-200 p-4 w-80">
-				<!-- Time Period Controls -->
-				<div class="space-y-4 mb-4">
-					<div>
-						<label for="basePeriod" class="block text-sm font-medium text-slate-700 mb-2">
-							Base Period (days ago)
-						</label>
-						<select id="basePeriod" bind:value={basePeriod} class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
-							<option value={1}>1 day ago</option>
-							<option value={3}>3 days ago</option>
-							<option value={7}>1 week ago</option>
-							<option value={14}>2 weeks ago</option>
-							<option value={30}>1 month ago</option>
-						</select>
-					</div>
-					
-					<div>
-						<label for="comparePeriod" class="block text-sm font-medium text-slate-700 mb-2">
-							Compare Period (days ago)
-						</label>
-						<select id="comparePeriod" bind:value={comparePeriod} class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
-							<option value={0}>Current</option>
-							<option value={1}>1 day ago</option>
-							<option value={3}>3 days ago</option>
-							<option value={7}>1 week ago</option>
-						</select>
-					</div>
-					
-					<button
-						onclick={handleAnalyze}
-						disabled={loading || basePeriod <= comparePeriod}
-						class="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{#if loading}
-							<Loader2 class="w-4 h-4 animate-spin" />
-							<span>Analyzing...</span>
-						{:else}
-							<Play class="w-4 h-4" />
-							<span>Analyze Changes</span>
-						{/if}
-					</button>
-				</div>
+            <div class="border-t border-slate-200 p-4 w-80">
+                <!-- Years Mode or Days Mode -->
+                {#if yearsMode}
+                    <div class="space-y-4 mb-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="start-year" class="block text-sm font-medium text-slate-700 mb-2">Before (year)</label>
+                                <input id="start-year" type="number" value={startYear ?? ''} min="1980" max="2100"
+                                    oninput={(e: any) => onYearsChange?.(Number(e.target.value), endYear ?? 0)}
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+                            </div>
+                            <div>
+                                <label for="end-year" class="block text-sm font-medium text-slate-700 mb-2">After (year)</label>
+                                <input id="end-year" type="number" value={endYear ?? ''} min="1980" max="2100"
+                                    oninput={(e: any) => onYearsChange?.(startYear ?? 0, Number(e.target.value))}
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+                            </div>
+                        </div>
+                        <button
+                            onclick={handleAnalyze}
+                            disabled={loading || (startYear ?? 0) >= (endYear ?? 0)}
+                            class="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {#if loading}
+                                <Loader2 class="w-4 h-4 animate-spin" />
+                                <span>Analyzing...</span>
+                            {:else}
+                                <Play class="w-4 h-4" />
+                                <span>Analyze Viewport Changes</span>
+                            {/if}
+                        </button>
+                    </div>
+                {:else}
+                    <div class="space-y-4 mb-4">
+                        <div>
+                            <label for="basePeriod" class="block text-sm font-medium text-slate-700 mb-2">
+                                Base Period (days ago)
+                            </label>
+                            <select id="basePeriod" bind:value={basePeriod} class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
+                                <option value={1}>1 day ago</option>
+                                <option value={3}>3 days ago</option>
+                                <option value={7}>1 week ago</option>
+                                <option value={14}>2 weeks ago</option>
+                                <option value={30}>1 month ago</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="comparePeriod" class="block text-sm font-medium text-slate-700 mb-2">
+                                Compare Period (days ago)
+                            </label>
+                            <select id="comparePeriod" bind:value={comparePeriod} class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
+                                <option value={0}>Current</option>
+                                <option value={1}>1 day ago</option>
+                                <option value={3}>3 days ago</option>
+                                <option value={7}>1 week ago</option>
+                            </select>
+                        </div>
+                        
+                        <button
+                            onclick={handleAnalyze}
+                            disabled={loading || basePeriod <= comparePeriod}
+                            class="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {#if loading}
+                                <Loader2 class="w-4 h-4 animate-spin" />
+                                <span>Analyzing...</span>
+                            {:else}
+                                <Play class="w-4 h-4" />
+                                <span>Analyze Changes</span>
+                            {/if}
+                        </button>
+                    </div>
+                {/if}
 				
 				<!-- Results -->
 				{#if result}

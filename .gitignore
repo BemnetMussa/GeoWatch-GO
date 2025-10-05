@@ -1,0 +1,37 @@
+# Node
+node_modules/
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# Svelte env
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+
+# Go build
+backend/geowatch-backend
+backend/bin/
+
+# Python venv and caches
+gee-service/venv/
+**/__pycache__/
+
+# Local env files
+.env
+.env.local
+backend/.env
+backend/.env.local
+gee-service/.env
+gee-service/.env.local
+
+# Secrets/credentials
+gee-service/gee-credentials.json
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

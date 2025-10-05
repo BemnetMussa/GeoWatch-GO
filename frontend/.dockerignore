@@ -1,0 +1,14 @@
+# Ignore node dependency folder
+node_modules
+
+# Ignore svelte-kit build artifacts
+.svelte-kit
+
+# Ignore build output folder (we create it inside the container)
+dist
+build
+
+# Ignore IDE/editor and OS files
+.vscode
+.idea
+.DS_Store
