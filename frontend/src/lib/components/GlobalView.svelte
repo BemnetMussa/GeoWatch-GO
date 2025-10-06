@@ -153,8 +153,9 @@
 			(buildModuleUrl as any).setBaseUrl?.('/Cesium/');
 		} catch {}
 
-    // Cesium Ion token from env
-    Ion.defaultAccessToken = publicEnv.PUBLIC_CESIUM_ION_TOKEN ?? '';
+		// Cesium Ion token from env
+		Ion.defaultAccessToken = publicEnv.PUBLIC_CESIUM_ION_TOKEN ?? '';
+		
 		viewer = new Viewer(cesiumContainer, {
 			terrainProvider: await createWorldTerrainAsync(),
 			animation: false, timeline: false, geocoder: false, homeButton: false, sceneModePicker: false,

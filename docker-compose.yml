@@ -11,6 +11,8 @@ services:
     ports:
       # We expose port 5000 for direct testing, but it's not required for the app to work.
       - "8080:5000"
+    env_file:
+      - ./gee-service/.env
     restart: unless-stopped
 
   # ----------------------------------------------------
@@ -23,6 +25,8 @@ services:
     ports:
       # Expose port 8000 on the host machine, mapping to port 8000 inside the container.
       - "8081:8000"
+    env_file:
+      - ./backend/.env
     environment:
       # This is the INTERNAL Docker network address for the Python service.
       PYTHON_SERVICE_URL: http://python-gee-service:5000
@@ -44,6 +48,8 @@ services:
       # Expose port 8080 on the host machine, mapping to the app's port inside the container.
       # SvelteKit adapter-node defaults to port 3000.
       - "8082:3000"
+    env_file:
+      - ./frontend/.env
     environment:
       # IMPORTANT: This is the PUBLIC URL the user's BROWSER will use to find the Go backend.
       # It MUST be localhost and the port you exposed for the 'go-backend' service (8000).
