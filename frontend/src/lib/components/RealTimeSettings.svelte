@@ -55,7 +55,7 @@
 	}
 </script>
 
-<div class="absolute bottom-4 right-4 z-10">
+<div class="absolute bottom-2 right-9 z-10">
 	<div class="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
 		<button
 			onclick={() => isOpen = !isOpen}

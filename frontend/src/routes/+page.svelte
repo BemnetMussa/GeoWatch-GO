@@ -8,6 +8,7 @@
 	import NotificationSystem from '$lib/components/NotificationSystem.svelte';
 	import type { FireData } from '$lib/types';
 	import { onMount } from 'svelte';
+	import GlobalView from '$lib/components/GlobalView.svelte';
 	
 	let mounted = $state(false);
 	let activeView: 'globe' | 'map' = $state('globe');
@@ -44,36 +45,22 @@
   container for the globe takes up the full space available. `h-full` and `w-full`
   on the child div will achieve this.
 -->
-<div class="h-screen w-screen flex flex-col bg-slate-900">
-	<div class="flex-1 relative">
+<div class="flex flex-col bg-slate-900 h-[calc(100vh-4rem)] w-full">
+	<div class="flex-1 relative h-full w-full">
 		{#if mounted}
-			<!-- View switcher -->
-			<div class="absolute top-4 right-4 z-20 flex items-center space-x-2 bg-slate-800 bg-opacity-90 text-white px-3 py-2 rounded-md">
-				<button class="px-2 py-1 rounded {activeView === 'globe' ? 'bg-orange-600' : 'bg-transparent'}" onclick={() => activeView = 'globe'}>Globe</button>
-				<button class="px-2 py-1 rounded {activeView === 'map' ? 'bg-orange-600' : 'bg-transparent'}" onclick={() => activeView = 'map'}>Map</button>
-				<button class="px-2 py-1 rounded bg-slate-700" onclick={() => showAnalytics = true}>Analytics</button>
-				<label class="flex items-center space-x-2 text-xs">
-					<input type="checkbox" bind:checked={notificationsEnabled} />
-					<span>Notifications</span>
-				</label>
-			</div>
-
 			<!-- Main view -->
-			<div class="absolute inset-0">
-				{#if activeView === 'globe'}
+			<div class="absolute inset-0 h-full w-full">
+				<GlobalView />
+				<!-- {#if activeView === 'globe'}
 					<GlobeView />
 				{:else}
 					<MapContainer />
-				{/if}
+				{/if} -->
 			</div>
 
-			<!-- Analytics modal (works for both views; MapContainer also has its own, this is demo for Globe) -->
 			<AnalyticsDashboard fires={demoFires} isOpen={showAnalytics} onClose={() => showAnalytics = false} />
-
-			<!-- Notification preview (optional) -->
 			<NotificationSystem enabled={notificationsEnabled} newFires={demoNewFires} onNotificationClick={() => {}} />
 		{:else}
-			<!-- Loading -->
 			<div class="h-full flex items-center justify-center">
 				<div class="text-center">
 					<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>

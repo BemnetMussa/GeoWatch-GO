@@ -83,7 +83,7 @@
     <div class="fixed inset-0 z-40 pointer-events-none">
         <div class="absolute inset-0 bg-black/10"></div>
     </div>
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-6">
+	<div class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="bg-white/95 backdrop-blur rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden pointer-events-auto">
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-slate-200">
