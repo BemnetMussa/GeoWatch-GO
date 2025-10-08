@@ -39,9 +39,19 @@
 	
 	// This will store our analysis layer so we can remove it later
 	let changeLayerEntity: Entity | null = null;
-	let changeImageryLayer: ImageryLayer | null = null; 
+	let changeImageryLayer: string | null = null;
 	let lastImageUrl: string | null = null;
 	let overlayOpacity: number = 0.75;
+	let analysisLayers: ImageryLayer[] = [];
+	const SAFEGUARD_ALTITUDE = 1500 * 1000;      // 1500km: Don't allow analysis above this height
+	const TILING_THRESHOLD_ALTITUDE = 250 * 1000; // 250km: Below this, use ultra-sharp tiles
+
+		
+	// --- NEW: Real-Time Mode State ---
+	let isRealTimeMode = false; // This will be our main toggle
+	let analysisDebounceTimer: number | null = null; // To prevent firing too many requests
+
+
 
 	// MapControls-like state for Globe
 	let activeLayer: 'satellite' | 'terrain' | 'street' = 'satellite';
@@ -86,6 +96,7 @@
 			toastTimer = null;
 		}, durationMs) as unknown as number;
 	}
+	
 
     // --- NEW: Zoom safeguard variables ---
 	let isZoomedInEnough = false;
@@ -179,8 +190,20 @@
 			checkZoomLevel();
 		});
 		
-		// --- NEW: Initial zoom check ---
-		checkZoomLevel();
+				// --- MODIFIED: The moveEnd listener is now the heart of the real-time system ---
+		viewer.camera.moveEnd.addEventListener(() => {
+			checkZoomLevel(); // Always check zoom level after moving
+			
+			// If real-time mode is on, automatically trigger a debounced analysis
+			if (isRealTimeMode) {
+				if (analysisDebounceTimer) clearTimeout(analysisDebounceTimer);
+				
+				analysisDebounceTimer = setTimeout(() => {
+					handleAnalyze();
+				}, 1000) as unknown as number; // Wait 1 second after camera stops to fire the request
+			}
+		});
+		checkZoomLevel(); // Initial check
 	}
 
 	function switchBaseLayer(layer: 'satellite' | 'terrain' | 'street') {
@@ -250,121 +273,173 @@
 		notificationsEnabled = !notificationsEnabled;
 	}
 
-	// --- 2. THE CORRECTED handleAnalyze FUNCTION ---
+	// --- THE "BRAIN": Main function called by the UI ---
 	async function handleAnalyze() {
-		if (!viewer) return;
-		
-		// --- NEW: Zoom safeguard check ---
+		// Prevent multiple simultaneous runs
+		if (!viewer || loadingAnalysis) return;
+		checkZoomLevel();
+
+		// In manual mode, we alert. In real-time mode, we just silently do nothing if too zoomed out.
 		if (!isZoomedInEnough) {
-			const area = calculateViewportArea();
-			notify(`Please zoom in further. Area ${area.toFixed(1)} km² is too large at current altitude.`, 'error');
-			return;
-		}
-		
-		// --- NEW: Area safeguard check ---
-		const area = calculateViewportArea();
-		if (area > MAX_ANALYSIS_AREA) {
-			notify(`Viewport area ${area.toFixed(1)} km² exceeds recommended ${MAX_ANALYSIS_AREA.toFixed(0)} km². Please zoom in.`, 'error');
-			return;
-		}
-		
-		loadingAnalysis = true;
-
-		 if (changeImageryLayer) {
-        viewer.imageryLayers.remove(changeImageryLayer);
-        changeImageryLayer = null;
+			if (!isRealTimeMode) {
+				notify(`Please zoom in further to enable analysis.`, 'error');
 			}
-
-		// --- FIX FOR ERRORS 1 & 2 ---
-		// Correctly remove the previous entity if it exists
-		if (changeLayerEntity) {
-			viewer.entities.remove(changeLayerEntity);
-			changeLayerEntity = null;
+			return;
 		}
+
+		loadingAnalysis = true;
+		
+		// Clear all previous results
+		if (changeLayerEntity) viewer.entities.remove(changeLayerEntity);
+		for (const layer of analysisLayers) viewer.imageryLayers.remove(layer);
+		analysisLayers = [];
+		changeLayerEntity = null;
 
 		try {
-			const viewRect = viewer.camera.computeViewRectangle();
-			if (!viewRect) {
-				notify("Could not determine map bounds. Please zoom in closer.", 'error');
-				loadingAnalysis = false;
-				return;
+			const cameraHeight = viewer.camera.positionCartographic.height;
+			
+			// The Adaptive Strategy Decision (UNCHANGED)
+			if (cameraHeight < TILING_THRESHOLD_ALTITUDE) {
+				if (!isRealTimeMode) notify('Executing ULTRA-SHARP 2x2 Tiled Analysis...', 'info');
+				await executeTiledAnalysis();
+			} else {
+				if (!isRealTimeMode) notify('Executing FAST Single Image Analysis...', 'info');
+				await executeSingleImageAnalysis();
 			}
 			
-			// --- NEW: Calculate and log the analysis area ---
-			const area = calculateViewportArea();
-			console.log(`Starting analysis for viewport area: ${area.toFixed(1)} km²`);
-			
-			const west = CesiumMath.toDegrees(viewRect.west);
-			const south = CesiumMath.toDegrees(viewRect.south);
-			const east = CesiumMath.toDegrees(viewRect.east);
-			const north = CesiumMath.toDegrees(viewRect.north);
-			
-			const aoi = [[ [west, south], [east, south], [east, north], [west, north], [west, south] ]];
-
-			const response = await fetch(`${BACKEND_URL}/api/v1/changes`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ aoi: aoi, startDate: `${startYear}-01-01`, endDate: `${endYear}-12-31` })
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error(`Backend API call failed: ${errorText}`);
-			}
-
-			const imageBlob = await response.blob();
-			// 1. Create an Image element from the blob URL
-			const imageUrl = URL.createObjectURL(imageBlob);
-			const image = new Image();
-			lastImageUrl = imageUrl;
-						
-			// --- THIS IS THE NEW, CORRECT VISUALIZATION LOGIC ---
-			
-			// 1. Create a SingleTileImageryProvider. This object knows how to handle a single image tile.
-			        // Our Python backend is configured to always return a 2048x2048 image.
-			const imageWidth = 2048;
-			const imageHeight = 2048;
-
-			const imageryProvider = new SingleTileImageryProvider({
-				url: imageUrl,
-				rectangle: viewRect,
-				
-				// --- THIS IS THE FIX ---
-				// We must explicitly tell the provider the dimensions of our image.
-				tileWidth: imageWidth,
-				tileHeight: imageHeight
-			});
-
-			// 2. Add this provider to the globe as a new ImageryLayer.
-			// We add it at a specific index (1) to make sure it appears on top of the base map.
-			changeImageryLayer = viewer.imageryLayers.addImageryProvider(imageryProvider);
-			// ensure analysis overlay is on top of all imagery (including labels)
-			viewer.imageryLayers.raiseToTop(changeImageryLayer);
-			
-			// 3. Set the opacity of the entire layer.
-			changeImageryLayer.alpha = overlayOpacity;
-
-			// 4. Fly to the new layer's extent.
-			viewer.flyTo(changeImageryLayer);
-
-			console.log("Successfully added GEE result as an ImageryLayer.");
-			notify('Analysis complete. Overlay added.', 'success');
-
+			// Only show success notification in manual mode
+			if (!isRealTimeMode) notify('Analysis complete. Overlay added.', 'success');
 		} catch (error) {
 			console.error("Analysis failed:", error);
-			notify(`Analysis failed. See console for details.`, 'error');
+			// Only show error notification in manual mode
+			if (!isRealTimeMode) {
+				const errorMsg = error instanceof Error ? error.message : String(error);
+				notify(`Analysis failed: ${errorMsg}`, 'error');
+			}
 		} finally {
 			loadingAnalysis = false;
 		}
 	}
+
+	// --- Strategy 1: The Fast Single Image Analysis (with your sharpening filter) ---
+	async function executeSingleImageAnalysis() {
+		if (!viewer) return;
+		const viewRect = viewer.camera.computeViewRectangle();
+		if (!viewRect) throw new Error("Could not determine map bounds.");
+		
+		const imageBlob = await fetchAnalysisBlob(viewRect, 0);
+
+		// Your "Ultra Sharp" Canvas Logic
+		const imageUrl = URL.createObjectURL(imageBlob);
+		lastImageUrl = imageUrl;
+		const image = new Image();
+		image.src = imageUrl;
+		await new Promise(resolve => { image.onload = resolve; });
+		
+		const canvas = document.createElement('canvas');
+		canvas.width = image.width;
+		canvas.height = image.height;
+		const context = canvas.getContext('2d');
+		if (context) {
+			context.filter = 'contrast(1.1) brightness(1.05)';
+			context.drawImage(image, 0, 0);
+		}
+		
+		changeLayerEntity = viewer.entities.add({
+			name: 'Single Analysis Layer',
+			rectangle: {
+				coordinates: viewRect,
+				material: new ImageMaterialProperty({ image: canvas, transparent: true }),
+				classificationType: ClassificationType.TERRAIN, 
+				height: 10.0, // Prevents Z-fighting
+			}
+		});
+
+		viewer.flyTo(changeLayerEntity);
+	}
+
+	// --- Strategy 2: The High-Quality Tiled Analysis ---
+	async function executeTiledAnalysis() {
+		if (!viewer) return;
+		const mainViewRect = viewer.camera.computeViewRectangle();
+		if (!mainViewRect) throw new Error("Could not determine map bounds.");
+
+		const subRectangles = createSubRectangles(mainViewRect);
+		
+		const promises = subRectangles.map((rect, i) => fetchAndCreateImageryLayer(rect, i));
+		
+		const newLayers = await Promise.all(promises);
+		
+		analysisLayers = newLayers;
+		if (newLayers.length > 0) {
+			viewer.camera.flyTo({ destination: newLayers[0].imageryProvider.rectangle });
+		}
+	}
+	
+	// --- Universal Helper to Fetch and Create an IMAGERY LAYER for Tiling ---
+	async function fetchAndCreateImageryLayer(rectangle: Rectangle, index: number): Promise<ImageryLayer> {
+		if (!viewer) throw new Error("Viewer is not initialized.");
+		const imageBlob = await fetchAnalysisBlob(rectangle, index);
+		const imageUrl = URL.createObjectURL(imageBlob);
+		if (index === 0){
+			changeImageryLayer = imageUrl;
+			lastImageUrl = imageUrl; // Save first tile for download link
+		}
+
+		const imageryProvider = new SingleTileImageryProvider({
+			url: imageUrl,
+			rectangle: rectangle,
+			tileWidth: 2048,
+			tileHeight: 2048
+		});
+
+		const newLayer = viewer.imageryLayers.addImageryProvider(imageryProvider);
+		newLayer.alpha = overlayOpacity;
+		return newLayer;
+	}
+	
+	// --- Universal Helper to abstract the fetch call ---
+	async function fetchAnalysisBlob(rectangle: Rectangle, index: number): Promise<Blob> {
+		const west = CesiumMath.toDegrees(rectangle.west);
+		const south = CesiumMath.toDegrees(rectangle.south);
+		const east = CesiumMath.toDegrees(rectangle.east);
+		const north = CesiumMath.toDegrees(rectangle.north);
+		const aoi = [[ [west, south], [east, south], [east, north], [west, north], [west, south] ]];
+
+		console.log(`Fetching tile #${index}...`);
+		const response = await fetch(`${BACKEND_URL}/api/v1/changes`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ aoi, startDate: `${startYear}-01-01`, endDate: `${endYear}-12-31` })
+		});
+
+		if (!response.ok) {
+			const errorData = await response.json();
+			throw new Error(errorData.error || `Backend call for tile ${index} failed.`);
+		}
+		return await response.blob();
+	}
+	
+	// --- Helper to create the 2x2 grid for tiling ---
+	function createSubRectangles(rect: Rectangle): Rectangle[] {
+		const midLon = (rect.west + rect.east) / 2;
+		const midLat = (rect.south + rect.north) / 2;
+		return [
+			new Rectangle(rect.west, rect.south, midLon, midLat), // Bottom-left
+			new Rectangle(midLon, rect.south, rect.east, midLat), // Bottom-right
+			new Rectangle(rect.west, midLat, midLon, rect.north), // Top-left
+			new Rectangle(midLon, midLat, rect.east, rect.north)  // Top-right
+		];
+	}
+	
 	onMount(() => {
 		initializeGlobe();
 		return () => {
-			if (viewer) {
-				viewer.destroy();
-			}
+			if (viewer) viewer.destroy();
+			if (analysisDebounceTimer) clearTimeout(analysisDebounceTimer);
 		};
 	});
+
 </script>
 
 <!-- The HTML and CSS are perfect. No changes needed. -->
@@ -397,7 +472,7 @@
 			max="1"
 			step="0.05"
 			bind:value={overlayOpacity}
-			on:input={() => { if (changeImageryLayer) changeImageryLayer.alpha = overlayOpacity; }}
+			on:input={() => { analysisLayers.forEach(layer => layer.alpha = overlayOpacity); }}
 			class="w-full"
 		/>
 		{#if lastImageUrl}
@@ -424,7 +499,12 @@
 />
 
 <!-- Real-time settings -->
+<!-- In GlobeView.svelte's HTML section -->
+
 <RealTimeSettings 
+	isRealTimeAnalysis={isRealTimeMode}
+	onToggleRealTimeAnalysis={() => isRealTimeMode = !isRealTimeMode}
+	
 	autoRefresh={autoRefresh}
 	refreshInterval={refreshIntervalMs}
 	notifications={notificationsEnabled}

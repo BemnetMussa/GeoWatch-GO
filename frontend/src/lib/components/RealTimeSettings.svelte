@@ -1,7 +1,14 @@
+<!-- src/lib/components/RealTimeSettings.svelte (Final, Upgraded Version) -->
+
 <script lang="ts">
-	import { Settings, Wifi, WifiOff, Bell, BellOff, Clock, Activity } from 'lucide-svelte';
+	import { Settings, Wifi, WifiOff, Bell, BellOff, Clock, Activity, Search } from 'lucide-svelte';
 	
 	interface Props {
+		// --- NEW PROPS FOR REAL-TIME ANALYSIS ---
+		isRealTimeAnalysis: boolean;
+		onToggleRealTimeAnalysis: () => void;
+
+		// --- Your existing props ---
 		autoRefresh: boolean;
 		refreshInterval: number;
 		notifications: boolean;
@@ -14,6 +21,8 @@
 	}
 	
 	let { 
+		isRealTimeAnalysis,
+		onToggleRealTimeAnalysis,
 		autoRefresh,
 		refreshInterval,
 		notifications,
@@ -48,22 +57,23 @@
 	
 	function getConnectionColor() {
 		switch (connectionStatus) {
-			case 'connected': return 'text-green-600';
-			case 'disconnected': return 'text-red-600';
-			case 'syncing': return 'text-orange-600';
+			case 'connected': return 'text-green-500';
+			case 'disconnected': return 'text-red-500';
+			case 'syncing': return 'text-orange-500';
 		}
 	}
 </script>
 
-<div class="absolute bottom-2 right-9 z-10">
+<div class="absolute bottom-4 right-4 z-10">
 	<div class="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
 		<button
 			onclick={() => isOpen = !isOpen}
-			class="flex items-center space-x-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+			class="flex items-center space-x-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors w-full text-left"
 		>
 			<Settings class="w-4 h-4" />
-			<span>Real-time</span>
-			<div class="flex items-center space-x-1 ml-2">
+			<span>Settings</span>
+			<div class="flex-grow"></div>
+			<div class="flex items-center space-x-1">
 				{#if connectionStatus === 'syncing'}
 					<Activity class="w-3 h-3 {getConnectionColor()} animate-pulse" />
 				{:else}
@@ -76,11 +86,26 @@
 		{#if isOpen}
 			{@const SvelteComponent_1 = getConnectionIcon()}
 			<div class="border-t border-slate-200 p-4 w-72">
-				<!-- Auto Refresh Toggle -->
+				
+				<!-- === NEW: REAL-TIME ANALYSIS TOGGLE === -->
+				<div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+					<div class="flex items-center space-x-2">
+						<Search class="w-4 h-4 text-slate-400" />
+						<span class="text-sm font-medium text-slate-700">Real-Time Analysis</span>
+					</div>
+					<button
+						onclick={onToggleRealTimeAnalysis}
+						class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {isRealTimeAnalysis ? 'bg-orange-600' : 'bg-slate-200'}"
+					>
+						<span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {isRealTimeAnalysis ? 'translate-x-6' : 'translate-x-1'}"></span>
+					</button>
+				</div>
+				
+				<!-- Auto Refresh Toggle for DATA -->
 				<div class="flex items-center justify-between mb-4">
 					<div class="flex items-center space-x-2">
 						<Clock class="w-4 h-4 text-slate-400" />
-						<span class="text-sm font-medium text-slate-700">Auto Refresh</span>
+						<span class="text-sm font-medium text-slate-700">Auto-Refresh Data</span>
 					</div>
 					<button
 						onclick={onToggleAutoRefresh}
@@ -90,23 +115,22 @@
 					</button>
 				</div>
 				
-				<!-- Refresh Interval -->
+				<!-- Refresh Interval Dropdown -->
 				{#if autoRefresh}
 					<div class="mb-4">
-						<label for="refreshInterval" class="block text-sm font-medium text-slate-700 mb-2">
+						<label for="refreshInterval" class="block text-xs font-medium text-slate-600 mb-1">
 							Update Interval
 						</label>
 						<select 
 							id="refreshInterval" 
 							value={refreshInterval} 
 							onchange={(e: any) => onChangeInterval(Number(e.target.value))}
-							class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+							class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm shadow-sm focus:ring-orange-500 focus:border-orange-500"
 						>
 							<option value={30000}>30 seconds</option>
 							<option value={60000}>1 minute</option>
 							<option value={300000}>5 minutes</option>
 							<option value={600000}>10 minutes</option>
-							<option value={1800000}>30 minutes</option>
 						</select>
 					</div>
 				{/if}
@@ -129,13 +153,13 @@
 					</button>
 				</div>
 				
-				<!-- Status Information -->
+				<!-- Status Information Section -->
 				<div class="pt-4 border-t border-slate-100 space-y-2">
 					<div class="flex items-center justify-between text-xs">
 						<span class="text-slate-500">Connection</span>
 						<div class="flex items-center space-x-1">
 							<SvelteComponent_1 class="w-3 h-3 {getConnectionColor()}" />
-							<span class="capitalize {getConnectionColor()}">{connectionStatus}</span>
+							<span class="capitalize font-medium {getConnectionColor()}">{connectionStatus}</span>
 						</div>
 					</div>
 					
@@ -152,4 +176,4 @@
 			</div>
 		{/if}
 	</div>
-</div>
+</div>```
